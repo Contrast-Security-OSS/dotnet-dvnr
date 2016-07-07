@@ -1,7 +1,7 @@
 **ContrastDvnr 1.0**:  Utility for displaying information about the IIS Site and applications on the current machine.  It creates a report file about the following:
 
  * Machine Information - OS Version, Processor Speed, Memory Available, .NET versions installed
- * IIS 7.0 Site Information 
+ * IIS Site Information (IIS7 or newer) 
     - Bindings - Ip Address, Port, Binding Information
     - Applications - AppPool, Authentication Mode, .NET Dlls, HttpModules 
     - AppPools - .NET Framework version, Pipeline mode, .NET x86/64bit.  *(AppPools not used by any application are ignored)*
@@ -20,8 +20,8 @@ By default results are written to report.xml file in XML format.  JSON or text o
 
 Prerequisites:
 
-    * Windows 2008/2008, Windows 7/8/10 or newer
-    * .NET Framework 4.0 or above
+    * Windows Server 2008/2012, Windows 7/8/10 or newer
+    * .NET Framework 4.0 or newer
 
 Binaries can be downloaded from the *dist* folder in this repository.
     
