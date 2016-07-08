@@ -20,8 +20,11 @@ By default results are written to report.xml file in XML format.  JSON or text o
 
 Prerequisites:
 
-    * Windows Server 2008/2012, Windows 7/8/10 or newer
-    * .NET Framework 4.0 or newer
+ * Windows Server 2008/2012, Windows 7/8/10 or newer
+ * .NET Framework 4.0 or newer
+ * Administrative privileges
 
-Binaries can be downloaded from the *dist* folder in this repository.
+Binaries can be downloaded from the *dist* folder in this repository.  
+
+Running the tool requires administrative privileges.  If you get a prompt about insufficient privileges choose "Run As Administrator" before running the tool.
     
