@@ -1,3 +1,5 @@
+![Image of Dvnrcat](/images/dvnrcat_small.png)
+
 **ContrastDvnr 1.0**:  Utility for displaying information about the IIS Site and applications on the current machine.  It creates a report file about the following:
 
  * Machine Information - OS Version, Processor Speed, Memory Available, .NET versions installed
