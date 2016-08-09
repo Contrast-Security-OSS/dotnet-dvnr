@@ -367,15 +367,14 @@ namespace ContrastDvnrLib
                     //get .net metadata
                     try
                     {
-                        var assembly = Assembly.ReflectionOnlyLoadFrom(lib.Filepath);
-                        var assemblyName = assembly.GetName();
+                        var assemblyName = AssemblyName.GetAssemblyName(lib.Filepath);
                         lib.Name = assemblyName.Name;
 
                         lib.Culture = assemblyName.CultureInfo.Name;
                         lib.Version = assemblyName.Version.ToString();
                         lib.ProcessorArchitecture = Enum.GetName(typeof(ProcessorArchitecture), assemblyName.ProcessorArchitecture);
 
-                        var bytes = assembly.GetName().GetPublicKeyToken();
+                        var bytes = assemblyName.GetPublicKeyToken();
                         if (bytes == null || bytes.Length == 0)
                         {
                             lib.PublicKeyToken = "None";
@@ -390,18 +389,7 @@ namespace ContrastDvnrLib
                         lib.AssemblyVersion = assemblyName.Version;
 
                     }
-                    catch(Exception ex) when (ex is FileLoadException)
-                    {
-                        //the API restriction exception occurs if the same assembly was loaded for another app already
-                        //keep the lib info we collected already and report the library
-                        if (!ex.Message.StartsWith("API restriction:"))
-                        {
-                            Trace.TraceWarning("Could not load assembly at {0}. Error: {1}", lib.Filepath, ex.Message);
-                            Console.Error.WriteLine("Could not load assembly info for {0}", lib.Filepath);
-                            continue;
-                        }
-                    }
-                    catch(Exception ex) when (ex is BadImageFormatException || ex is FileNotFoundException || ex is NotSupportedException)
+                    catch(Exception ex) when (ex is BadImageFormatException || ex is FileNotFoundException || ex is NotSupportedException || ex is FileLoadException)
                     {
                         Trace.TraceWarning("Could not load assembly at {0}. Error: {1}", lib.Filepath, ex.ToString());
                         Console.Error.WriteLine("Could not load assembly info for {0}", lib.Filepath);
