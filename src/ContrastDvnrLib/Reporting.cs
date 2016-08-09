@@ -367,7 +367,7 @@ namespace ContrastDvnrLib
                     //get .net metadata
                     try
                     {
-                        var assembly = Assembly.LoadFile(lib.Filepath);
+                        var assembly = Assembly.ReflectionOnlyLoadFrom(lib.Filepath);
                         var assemblyName = assembly.GetName();
                         lib.Name = assemblyName.Name;
 
@@ -390,7 +390,18 @@ namespace ContrastDvnrLib
                         lib.AssemblyVersion = assemblyName.Version;
 
                     }
-                    catch(Exception ex) when (ex is BadImageFormatException || ex is FileNotFoundException)
+                    catch(Exception ex) when (ex is FileLoadException)
+                    {
+                        //the API restriction exception occurs if the same assembly was loaded for another app already
+                        //keep the lib info we collected already and report the library
+                        if (!ex.Message.StartsWith("API restriction:"))
+                        {
+                            Trace.TraceWarning("Could not load assembly at {0}. Error: {1}", lib.Filepath, ex.Message);
+                            Console.Error.WriteLine("Could not load assembly info for {0}", lib.Filepath);
+                            continue;
+                        }
+                    }
+                    catch(Exception ex) when (ex is BadImageFormatException || ex is FileNotFoundException || ex is NotSupportedException)
                     {
                         Trace.TraceWarning("Could not load assembly at {0}. Error: {1}", lib.Filepath, ex.ToString());
                         Console.Error.WriteLine("Could not load assembly info for {0}", lib.Filepath);
