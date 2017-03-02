@@ -10,19 +10,25 @@ using System.Diagnostics;
 namespace ContrastDvnr
 {
 
-
+    public enum ReportFileType {
+        Unknown,
+        Xml,
+        Json,
+        Text
+    }
 
     public class Program
     {
         private const string usage = @"ContrastDvnr 1.0.  Utility for displaying information about the IIS 7.0+ sites and applications on the current machine.  By default results are written to report.xml file in XML format.  Json or text output format can be chosen instead.
 
     Usage: 
-        ContrastDvnr.exe [xml | json | text] [--file=<FILE>] [--screen]
+        ContrastDvnr.exe [xml | json | text] [--file=<FILE>] [--from=<FROM_FILE>] [--screen]
         ContrastDvnr.exe (-h | --help)
         ContrastDvnr.exe --version
 
     Options:
         --file=<FILE>     Different name/path for the report file [default: report.xml]
+        --from=<FROM_FILE>     Generate from existing dvnr report instead of current machine
         --screen          Display to standard output stream instead of file
 ";
 
@@ -46,22 +52,169 @@ namespace ContrastDvnr
             bool isJson = arguments["json"].IsTrue;
             bool isText = arguments["text"].IsTrue;
 
+            ReportFileType reportType = ReportFileType.Unknown;
+
             // default to xml if no format is specified
             if (!isXml && !isJson && !isText)
-                isXml = true;
+                reportType = ReportFileType.Xml;
+            else if (isXml)
+                reportType = ReportFileType.Xml;
+            else if (isJson)
+                reportType = ReportFileType.Json;
+            else if (isText)
+                reportType = ReportFileType.Text;
 
             string fileName = "report.xml";
             string inFilename = arguments["--file"].ToString();
-            if(inFilename != "report.xml")
+            if (inFilename != "report.xml")
             {
                 fileName = inFilename;
             }
             else
             {   // set default report file names
-                if (isXml) fileName = "report.xml";
-                else if (isJson) fileName = "report.json";
-                else if (isText) fileName = "report.txt";
+                if (reportType == ReportFileType.Xml) fileName = "report.xml";
+                else if (reportType == ReportFileType.Json) fileName = "report.json";
+                else if (reportType == ReportFileType.Text) fileName = "report.txt";
             }
+
+            DvnrReport report;
+            string fromFilename = arguments.ContainsKey("--from") ? arguments["--from"].ToString() : "";
+
+            if (!string.IsNullOrEmpty(fromFilename))
+            {
+                report = GenerateReportFromExisting(fromFilename, reportType);
+            }
+            else
+            {
+                report = GenerateReportFromCurrentMachine();
+            }
+            
+
+            if (arguments["--screen"].IsTrue)   // write to screen instead of file
+            {
+                if (reportType == ReportFileType.Xml) PrintReportXml(report, Console.Out);
+                if (reportType == ReportFileType.Json) PrintReportJson(report, Console.Out);
+                if (reportType == ReportFileType.Text) PrintReportText(report, Console.Out);
+            }
+            else
+            {   // write to file
+                try
+                {
+                    string filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+                    File.Delete(filePath);
+
+                    using (var file = File.Open(filePath, FileMode.OpenOrCreate, FileAccess.Write))
+                    {
+                        using (var sw = new StreamWriter(file))
+                        {
+                            if (reportType == ReportFileType.Xml) PrintReportXml(report, sw);
+                            if (reportType == ReportFileType.Json) PrintReportJson(report, sw);
+                            if (reportType == ReportFileType.Text) PrintReportText(report, sw);
+
+                            Console.WriteLine("Report was written to: {0}", filePath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceError("Could not save report file. Error: {0}", ex.ToString());
+                    Console.WriteLine("Could not save report file");
+                }
+            }
+
+            Console.WriteLine("Writing compatibility report");
+            WriteCompatSummary(report);
+
+            Trace.TraceInformation("ContrastDvnr exited");
+            Trace.Flush();
+        }
+
+        private static void WriteCompatSummary(DvnrReport report)
+        {
+
+            string filePath = "compatSummary.md";
+
+            var apps = report.Sites.SelectMany(s => s.Applications).OrderBy(a=>a.Path).ToList();
+
+            var appPoolsDict = report.AppPools.ToDictionary(a => a.Name);
+
+            using (var file = File.Open(filePath, FileMode.Create, FileAccess.Write))
+            {
+                using (var sw = new StreamWriter(file))
+                {
+                    sw.WriteLine("## Applications");
+                    sw.WriteLine();
+                    sw.WriteLine($"There are {apps.Count} total applications.");
+                    sw.WriteLine();
+
+                    sw.WriteLine(" App Path | AppPool | Site | CLR Version | Bitness | Pipeline | Num Libraries");
+                    sw.WriteLine(" --- | --- | --- | --- | --- | --- | ---");
+
+                    
+                    foreach(var app in apps)
+                    {
+                        var site = report.Sites.Where(s => s.Applications.Contains(app)).SingleOrDefault();
+                        var appPool = appPoolsDict[app.AppPoolName];
+                        string bitness = appPool.X64 ? "64bit" : "32bit";
+
+                        sw.WriteLine($"{app.Path} | {appPool.Name} | {site?.Name } | {appPool.CLRVersion} | {bitness} | {appPool.PipelineMode} | {app.Libraries.Count} ");
+                    }
+
+                    sw.WriteLine();
+                    sw.WriteLine("## AppPools");
+                    sw.WriteLine();
+                    sw.WriteLine($"There are {report.AppPools.Count} total AppPools.");
+                    sw.WriteLine();
+
+                    sw.WriteLine(" AppPool | CLR Version | Bitness | Pipeline | Num Apps | Apps");
+                    sw.WriteLine(" --- | --- | --- | --- | --- | ---");
+
+
+                    foreach (var appPool in report.AppPools.OrderBy(a => a.Name))
+                    {
+                        string bitness = appPool.X64 ? "64bit" : "32bit";
+                        var appsInPool = apps.Where(a => a.AppPoolName == appPool.Name).OrderBy(a => a.Path).Select(a=>a.Path == "/" ? "/" : a.Path.TrimStart('/')).ToArray();
+                        string appsInPoolDisplay = string.Join(", ", appsInPool);
+
+                        sw.WriteLine($"{appPool.Name} | {appPool.CLRVersion} | {bitness} | {appPool.PipelineMode} | {appPool.NumApplications} | {appsInPoolDisplay}");
+                    }
+                }
+            }
+        }
+
+        private static DvnrReport GenerateReportFromExisting(string fromFilename, ReportFileType reportType)
+        {
+            if (reportType == ReportFileType.Unknown || reportType == ReportFileType.Text)
+                throw new ArgumentException("Unsupported report type", "reportType");
+
+            if (!File.Exists(fromFilename))
+            {
+                Trace.TraceError("Could not find specified from file at {0}", fromFilename);
+                Console.WriteLine("Could not find specified from file at {0}", fromFilename);
+                return null;
+            }
+
+            string dvnrReportText;
+            using (var fileStream = File.Open(fromFilename, FileMode.Open, FileAccess.Read))
+            {
+                using (StreamReader streamReader = new StreamReader(fileStream, true))
+                {
+                    dvnrReportText = streamReader.ReadToEnd();
+                }
+            }
+            
+            if(reportType == ReportFileType.Xml)
+            {
+                Console.Out.Write("Parsing XML report from {0}.", fromFilename);
+                return XmlUtils.XmlDeserializeFromString<DvnrReport>(dvnrReportText);
+            }
+            // TODO: support json file
+
+            return null;
+        }
+
+        private static DvnrReport GenerateReportFromCurrentMachine()
+        {
             Console.Out.WriteLine("Gathering machine information");
             var machineInformation = Reporting.GetMachineInformation();
 
@@ -87,44 +240,8 @@ namespace ContrastDvnr
                 AppPools = appPools,
                 GacLibraries = gacLibraries
             };
-            
-
-            if (arguments["--screen"].IsTrue)   // write to screen instead of file
-            {
-                if (isXml) PrintReportXml(report, Console.Out);
-                if (isJson) PrintReportJson(report, Console.Out);
-                if (isText) PrintReportText(report, Console.Out);
-            }
-            else 
-            {   // write to file
-                try
-                {
-                    string filePath = Path.Combine(Environment.CurrentDirectory, fileName);
-                    File.Delete(filePath);
-
-                    using (var file = File.Open(filePath, FileMode.OpenOrCreate, FileAccess.Write))
-                    {
-                        using (var sw = new StreamWriter(file))
-                        {
-                            if (isXml) PrintReportXml(report, sw);
-                            if (isJson) PrintReportJson(report, sw);
-                            if (isText) PrintReportText(report, sw);
-
-                            Console.WriteLine("Report was written to: {0}", filePath);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceError("Could not save report file. Error: {0}", ex.ToString());
-                    Console.WriteLine("Could not save report file");
-                }
-            }
-
-            Trace.TraceInformation("ContrastDvnr exited");
-            Trace.Flush();
+            return report;
         }
-
 
         private static void PrintReportXml(DvnrReport report, TextWriter tw)
         {
