@@ -62,11 +62,6 @@
     <Compile Include="DvnrTraceListener.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="T4DocoptNet.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>T4DocoptNet.tt</DependentUpon>
-    </Compile>
     <Compile Include="TeamServerConnectivityChecker.cs" />
     <Compile Include="XmlUtils.cs" />
   </ItemGroup>
@@ -75,7 +70,6 @@
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
-    <None Include="T4DocoptNet.tt.hooks.t4" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
@@ -90,11 +84,6 @@
     <Content Include="MarkdownTemplate.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="T4DocoptNet.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>T4DocoptNet.cs</LastGenOutput>
-    </None>
-    <None Include="T4DocoptNet.tt.settings.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

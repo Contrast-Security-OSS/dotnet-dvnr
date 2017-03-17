@@ -211,6 +211,7 @@ namespace ContrastDvnr
                     summaryReport);
 
                 File.WriteAllText(filePath, result);
+                Console.WriteLine("Compatibility report was written to " + filePath);
             }
             catch(Exception ex)
             {
