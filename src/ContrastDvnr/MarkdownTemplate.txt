@@ -1,0 +1,52 @@
+﻿## Applications
+
+There are @Model.Applications.Count total applications.
+
+App Path | AppPool | Site | CLR Version | Bitness | Pipeline | Num Libraries
+ --- | --- | --- | --- | --- | --- | ---
+@foreach (var app in Model.Applications) {
+
+ <text>@app.Path | @app.AppPool | @app.Site | @app.ClrVersion | @app.Bitness | @app.Pipeline | @app.NumLibs</text>
+
+}
+
+
+## Application Pools
+
+There are @Model.AppPools.Count total Application Pools.
+
+AppPool | Rating | CLR Version | Bitness | Pipeline | Num Apps | Apps
+ --- | --- | --- | --- | --- | --- | ---
+@foreach (var app in Model.AppPools) {
+
+ <text>@app.Name | @app.Rating | @app.ClrVersion | @app.Bitness | @app.Pipeline | @app.NumApplications | @app.AppNames </text>
+
+}
+
+## Library Warnings
+
+@if(Model.AppLibraryIssues.Count > 0) {
+
+<text>
+The following incompatible libraries were detected in your applications.  These libraries may have incompatibilities as listed below.
+Application | Assembly | Path | Problem
+--- | --- | --- | ---</text>
+foreach(var problem in Model.AppLibraryIssues) {
+<text>@problem.AppName | @problem.Library.Name | @problem.Library.Filepath | @problem.Library.Issue.Description</text>
+}
+
+}
+
+
+@if(Model.GacLibraryIssues.Count > 0) {
+
+<text>
+The following incompatible libraries were detected in the Global Assembly Cache (GAC).  Any applications using these libraries may have incompatibilities as listed below.
+Assembly | Problem
+--- | ---</text>
+foreach(var lib in Model.GacLibraryIssues) {
+<text>@lib.Name | @lib.Issue.Description </text>
+}
+
+}
+

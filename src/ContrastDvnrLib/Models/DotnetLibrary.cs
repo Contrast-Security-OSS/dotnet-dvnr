@@ -34,6 +34,8 @@ namespace ContrastDvnrLib.Models
         public string Language { get; set; }
 
         public Version AssemblyVersion { get; set; }
+
+        public LibraryIssue Issue { get; set; }
     }
 
     public class GacLibrary

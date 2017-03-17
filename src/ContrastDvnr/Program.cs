@@ -6,11 +6,18 @@ using System.Linq;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Diagnostics;
+using RazorEngine.Configuration;
+using RazorEngine.Templating;
+using ContrastDvnrLib.Models.Report;
+using System.Collections.Generic;
+using ContrastDvnrLib.Models;
+using System.Reflection;
 
 namespace ContrastDvnr
 {
 
-    public enum ReportFileType {
+    public enum ReportFileType
+    {
         Unknown,
         Xml,
         Json,
@@ -78,7 +85,7 @@ namespace ContrastDvnr
             }
 
             DvnrReport report;
-            string fromFilename = arguments.ContainsKey("--from") ? arguments["--from"].ToString() : "";
+            string fromFilename = arguments.ContainsKey("--from") ? arguments["--from"]?.ToString() : "";
 
             if (!string.IsNullOrEmpty(fromFilename))
             {
@@ -88,7 +95,7 @@ namespace ContrastDvnr
             {
                 report = GenerateReportFromCurrentMachine();
             }
-            
+
 
             if (arguments["--screen"].IsTrue)   // write to screen instead of file
             {
@@ -132,60 +139,98 @@ namespace ContrastDvnr
         private static void WriteCompatSummary(DvnrReport report)
         {
 
-            string filePath = "compatSummary.md";
-
-            var apps = report.Sites.SelectMany(s => s.Applications).OrderBy(a=>a.Path).ToList();
+            var apps = report.Sites.SelectMany(s => s.Applications).OrderBy(a => a.Path).ToList();
 
             var appPoolsDict = report.AppPools.ToDictionary(a => a.Name);
 
-            using (var file = File.Open(filePath, FileMode.Create, FileAccess.Write))
+            var appList = new List<ApplicationInfo>();
+            foreach (var app in apps)
             {
-                using (var sw = new StreamWriter(file))
+                var site = report.Sites.Where(s => s.Applications.Contains(app)).SingleOrDefault();
+                var appPool = appPoolsDict[app.AppPoolName];
+                string bitness = appPool.X64 ? "64bit" : "32bit";
+
+                appList.Add(new ApplicationInfo
                 {
-                    sw.WriteLine("## Applications");
-                    sw.WriteLine();
-                    sw.WriteLine($"There are {apps.Count} total applications.");
-                    sw.WriteLine();
-
-                    sw.WriteLine(" App Path | AppPool | Site | CLR Version | Bitness | Pipeline | Num Libraries");
-                    sw.WriteLine(" --- | --- | --- | --- | --- | --- | ---");
-
-                    
-                    foreach(var app in apps)
-                    {
-                        var site = report.Sites.Where(s => s.Applications.Contains(app)).SingleOrDefault();
-                        var appPool = appPoolsDict[app.AppPoolName];
-                        string bitness = appPool.X64 ? "64bit" : "32bit";
-
-                        sw.WriteLine($"{app.Path} | {appPool.Name} | {site?.Name } | {appPool.CLRVersion} | {bitness} | {appPool.PipelineMode} | {app.Libraries.Count} ");
-                    }
-
-                    sw.WriteLine();
-                    sw.WriteLine("## AppPools");
-                    sw.WriteLine();
-                    sw.WriteLine($"There are {report.AppPools.Count} total AppPools.");
-                    sw.WriteLine();
-
-                    sw.WriteLine(" AppPool | CLR Version | Bitness | Pipeline | Num Apps | Apps");
-                    sw.WriteLine(" --- | --- | --- | --- | --- | ---");
-
-
-                    foreach (var appPool in report.AppPools.OrderBy(a => a.Name))
-                    {
-                        string bitness = appPool.X64 ? "64bit" : "32bit";
-                        var appsInPool = apps.Where(a => a.AppPoolName == appPool.Name).OrderBy(a => a.Path).Select(a=>a.Path == "/" ? "/" : a.Path.TrimStart('/')).ToArray();
-                        string appsInPoolDisplay = string.Join(", ", appsInPool);
-
-                        sw.WriteLine($"{appPool.Name} | {appPool.CLRVersion} | {bitness} | {appPool.PipelineMode} | {appPool.NumApplications} | {appsInPoolDisplay}");
-                    }
-                }
+                    Path = app.Path,
+                    AppPool = appPool.Name,
+                    Site = site?.Name,
+                    ClrVersion = appPool.CLRVersion,
+                    Bitness = bitness,
+                    NumLibs = app.Libraries.Count,
+                    Pipeline = appPool.PipelineMode
+                });
             }
+
+            var poolList = new List<AppPoolInfo>();
+            foreach (var appPool in report.AppPools.OrderBy(a => a.Name))
+            {
+                string bitness = appPool.X64 ? "64bit" : "32bit";
+                var appsInPool = apps.Where(a => a.AppPoolName == appPool.Name).OrderBy(a => a.Path).Select(a => a.Path == "/" ? "/" : a.Path.TrimStart('/')).ToArray();
+                string appsInPoolDisplay = string.Join(", ", appsInPool);
+                string rating = CalcAppPoolRating(appPool);
+
+                poolList.Add(new AppPoolInfo
+                {
+                    Name = appPool.Name,
+                    NumApplications = appPool.NumApplications,
+                    AppNames = appsInPoolDisplay,
+                    Bitness = bitness,
+                    ClrVersion = appPool.CLRVersion,
+                    Pipeline = appPool.PipelineMode,
+                    Rating = rating
+                });
+            }
+
+            var summaryReport = new SummaryReport
+            {
+                Applications = appList,
+                AppPools = poolList,
+                GacLibraryIssues = report.GacLibraries.Where(l => l.Issue != null).ToList(),
+                AppLibraryIssues = apps.Where(a => a.Libraries.Any(l => l.Issue != null))
+                    .SelectMany(a => a.Libraries.Where(l => l.Issue != null).Select(l => new AppIssue { AppName = a.Path, Library = l }))
+                    .ToList()
+            };
+
+
+            var config = new TemplateServiceConfiguration();
+            // .. configure your instance
+            config.DisableTempFileLocking = true;
+            config.Language = RazorEngine.Language.CSharp;
+            config.EncodedStringFactory = new RazorEngine.Text.RawStringFactory();
+
+
+
+            var templateService = RazorEngineService.Create(config);
+
+            string filePath = "compatSummary.md";
+
+            string template = File.ReadAllText("MarkdownTemplate.txt");
+            var result =
+                templateService.RunCompile(template, "templateKey", null,
+                summaryReport);
+
+            File.WriteAllText(filePath, result);
+
+        }
+
+        private static string CalcAppPoolRating(IISAppPool appPool)
+        {
+            int rating = 5;
+            if (appPool.CLRVersion == "v2.0")
+                rating -= 2;
+            if (appPool.PipelineMode == "Classic")
+                rating -= 1;
+            if (!appPool.X64)
+                rating -= 1;
+
+            return new string('*', rating);
         }
 
         private static DvnrReport GenerateReportFromExisting(string fromFilename, ReportFileType reportType)
         {
             if (reportType == ReportFileType.Unknown || reportType == ReportFileType.Text)
-                throw new ArgumentException("Unsupported report type", "reportType");
+                throw new ArgumentException("Unsupported report type", nameof(reportType));
 
             if (!File.Exists(fromFilename))
             {
@@ -202,8 +247,8 @@ namespace ContrastDvnr
                     dvnrReportText = streamReader.ReadToEnd();
                 }
             }
-            
-            if(reportType == ReportFileType.Xml)
+
+            if (reportType == ReportFileType.Xml)
             {
                 Console.Out.Write("Parsing XML report from {0}.", fromFilename);
                 return XmlUtils.XmlDeserializeFromString<DvnrReport>(dvnrReportText);
@@ -235,6 +280,7 @@ namespace ContrastDvnr
 
             var report = new DvnrReport
             {
+                Version = Assembly.GetExecutingAssembly().GetName().Version.ToString(),
                 MachineInformation = machineInformation,
                 Sites = sites,
                 AppPools = appPools,
@@ -253,7 +299,7 @@ namespace ContrastDvnr
         {
             DataContractJsonSerializer serializer = new DataContractJsonSerializer(report.GetType());
 
-            using(var ms = new MemoryStream())
+            using (var ms = new MemoryStream())
             {
                 serializer.WriteObject(ms, report);
                 string str = Encoding.Default.GetString(ms.ToArray());
@@ -317,7 +363,7 @@ namespace ContrastDvnr
                 tw.WriteLine(lineBreak);
                 tw.WriteLine("{0} Applications ({1})", site.Name, site.Applications.Count);
                 tw.WriteLine(lineBreak);
-                foreach(var app in site.Applications)
+                foreach (var app in site.Applications)
                 {
                     tw.WriteLine("Path: {0}", app.Path);
                     tw.WriteLine("Physical Path: {0}", app.PhysicalPath);
@@ -327,7 +373,7 @@ namespace ContrastDvnr
                     tw.WriteLine("Enable Preload: {0}", app.EnablePreload);
                     tw.WriteLine("User: {0}", app.SpecificUser);
                     tw.WriteLine("Libraries ({0})", app.Libraries.Count);
-                    foreach(var lib in app.Libraries)
+                    foreach (var lib in app.Libraries)
                     {
                         tw.WriteLine("\tFilename: {0}", lib.Filename);
                         tw.WriteLine("\tName: {0}", lib.Name);
@@ -345,7 +391,7 @@ namespace ContrastDvnr
                         tw.WriteLine("\t" + lineBreak);
                     }
                     tw.WriteLine("HttpModules ({0})", app.Modules.Count);
-                    foreach(var module in app.Modules)
+                    foreach (var module in app.Modules)
                     {
                         tw.WriteLine("\tName: {0}", module.Name);
                         tw.WriteLine("\tType: {0}", module.Type);
@@ -369,7 +415,7 @@ namespace ContrastDvnr
                 tw.WriteLine("GAC LIBRARIES ({0})", gacLibs.Count);
                 tw.WriteLine(sectionBreak);
 
-                foreach(var lib in gacLibs)
+                foreach (var lib in gacLibs)
                 {
                     tw.WriteLine("\tFilename: {0}", lib.Filename);
                     tw.WriteLine("\tName: {0}", lib.Name);
