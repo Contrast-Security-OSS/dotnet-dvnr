@@ -12,6 +12,9 @@ using ContrastDvnrLib.Models.Report;
 using System.Collections.Generic;
 using ContrastDvnrLib.Models;
 using System.Reflection;
+using System.Security.Policy;
+using System.Security;
+using System.Security.Permissions;
 
 namespace ContrastDvnr
 {
@@ -29,18 +32,45 @@ namespace ContrastDvnr
         private const string usage = @"ContrastDvnr 1.0.  Utility for displaying information about the IIS 7.0+ sites and applications on the current machine.  By default results are written to report.xml file in XML format.  Json or text output format can be chosen instead.
 
     Usage: 
-        ContrastDvnr.exe [xml | json | text] [--file=<FILE>] [--from=<FROM_FILE>] [--screen]
+        ContrastDvnr.exe [xml | json | text] [--from=<FROM_FILE>] [--screen]
         ContrastDvnr.exe (-h | --help)
         ContrastDvnr.exe --version
 
     Options:
-        --file=<FILE>     Different name/path for the report file [default: report.xml]
         --from=<FROM_FILE>     Generate from existing dvnr report instead of current machine
         --screen          Display to standard output stream instead of file
 ";
 
         public static void Main(string[] args)
         {
+
+            if (AppDomain.CurrentDomain.IsDefaultAppDomain())
+            {
+                // RazorEngine cannot clean up from the default appdomain...
+                Console.WriteLine("Switching to second AppDomain...");
+                AppDomainSetup adSetup = new AppDomainSetup();
+                adSetup.ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase;
+                var current = AppDomain.CurrentDomain;
+                // You only need to add strongnames when your appdomain is not a full trust environment.
+                var strongNames = new StrongName[0];
+
+                var domain = AppDomain.CreateDomain(
+                    "MyMainDomain", null,
+                    current.SetupInformation, new PermissionSet(PermissionState.Unrestricted),
+                    strongNames);
+                try
+                {
+                    domain.ExecuteAssembly(Assembly.GetExecutingAssembly().Location, args);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error executing ContrastDvnr: " + ex.Message);
+                    Trace.TraceError("Error executing ContrastDvnr: " + ex);
+                    return;
+                }
+                return;
+            }
+
             var traceOutput = new DvnrTraceListener("ContrastDvnr.log", "tracelog");
             Trace.Listeners.Add(traceOutput);
             Trace.AutoFlush = true;
@@ -72,17 +102,11 @@ namespace ContrastDvnr
                 reportType = ReportFileType.Text;
 
             string fileName = "report.xml";
-            string inFilename = arguments["--file"].ToString();
-            if (inFilename != "report.xml")
-            {
-                fileName = inFilename;
-            }
-            else
-            {   // set default report file names
-                if (reportType == ReportFileType.Xml) fileName = "report.xml";
-                else if (reportType == ReportFileType.Json) fileName = "report.json";
-                else if (reportType == ReportFileType.Text) fileName = "report.txt";
-            }
+
+            if (reportType == ReportFileType.Xml) fileName = "report.xml";
+            else if (reportType == ReportFileType.Json) fileName = "report.json";
+            else if (reportType == ReportFileType.Text) fileName = "report.txt";
+
 
             DvnrReport report;
             string fromFilename = arguments.ContainsKey("--from") ? arguments["--from"]?.ToString() : "";
@@ -96,6 +120,7 @@ namespace ContrastDvnr
                 report = GenerateReportFromCurrentMachine();
             }
 
+            string directory = CreateOutputDirectory();
 
             if (arguments["--screen"].IsTrue)   // write to screen instead of file
             {
@@ -105,127 +130,98 @@ namespace ContrastDvnr
             }
             else
             {   // write to file
-                try
-                {
-                    string filePath = Path.Combine(Environment.CurrentDirectory, fileName);
-                    File.Delete(filePath);
+                string dvnrReportPath = Path.Combine(directory, fileName);
+                WriteDvnrReportFile(reportType, dvnrReportPath, report);
 
-                    using (var file = File.Open(filePath, FileMode.OpenOrCreate, FileAccess.Write))
-                    {
-                        using (var sw = new StreamWriter(file))
-                        {
-                            if (reportType == ReportFileType.Xml) PrintReportXml(report, sw);
-                            if (reportType == ReportFileType.Json) PrintReportJson(report, sw);
-                            if (reportType == ReportFileType.Text) PrintReportText(report, sw);
-
-                            Console.WriteLine("Report was written to: {0}", filePath);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceError("Could not save report file. Error: {0}", ex.ToString());
-                    Console.WriteLine("Could not save report file");
-                }
+                string compatReportPath = Path.Combine(directory, "compatSummary.md");
+                Console.WriteLine("Writing compatibility report.");
+                WriteCompatSummary(report, compatReportPath);
             }
-
-            Console.WriteLine("Writing compatibility report");
-            WriteCompatSummary(report);
 
             Trace.TraceInformation("ContrastDvnr exited");
             Trace.Flush();
         }
 
-        private static void WriteCompatSummary(DvnrReport report)
+        private static string CreateOutputDirectory()
+        {
+            string dir = string.Format("{0}_{1:yyyyMMddHHmm}", System.Net.Dns.GetHostName().Replace(' ', '_'), DateTime.Now);
+            string dirPath = Path.Combine(Environment.CurrentDirectory, dir);
+            if(!Directory.Exists(dirPath))
+                Directory.CreateDirectory(dirPath);
+
+            return dir;
+        }
+
+        private static void WriteDvnrReportFile(ReportFileType reportType, string dvnrFilePath, DvnrReport report)
+        {
+            try
+            {
+                string filePath = Path.Combine(Environment.CurrentDirectory, dvnrFilePath);
+                File.Delete(filePath);
+
+                using (var file = File.Open(filePath, FileMode.OpenOrCreate, FileAccess.Write))
+                {
+                    using (var sw = new StreamWriter(file))
+                    {
+                        if (reportType == ReportFileType.Xml) PrintReportXml(report, sw);
+                        if (reportType == ReportFileType.Json) PrintReportJson(report, sw);
+                        if (reportType == ReportFileType.Text) PrintReportText(report, sw);
+
+                        Console.WriteLine("Report was written to: {0}", filePath);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceError("Could not save report file. Error: {0}", ex.ToString());
+                Console.WriteLine("Could not save report file");
+            }
+        }
+
+        private static void WriteCompatSummary(DvnrReport report, string compatFilePath)
         {
 
-            var apps = report.Sites.SelectMany(s => s.Applications).OrderBy(a => a.Path).ToList();
-
-            var appPoolsDict = report.AppPools.ToDictionary(a => a.Name);
-
-            var appList = new List<ApplicationInfo>();
-            foreach (var app in apps)
+            try
             {
-                var site = report.Sites.Where(s => s.Applications.Contains(app)).SingleOrDefault();
-                var appPool = appPoolsDict[app.AppPoolName];
-                string bitness = appPool.X64 ? "64bit" : "32bit";
+                var summaryReport = SummaryReporting.GenerateCompatReport(report);
+                var connectionErrors = TeamServerConnectivityChecker.CheckForConnectionProblems(true);
+                foreach (var err in connectionErrors)
+                    Console.WriteLine(err);
 
-                appList.Add(new ApplicationInfo
+                var config = new TemplateServiceConfiguration();
+                config.DisableTempFileLocking = true;
+                config.Language = RazorEngine.Language.CSharp;
+                config.EncodedStringFactory = new RazorEngine.Text.RawStringFactory();
+
+
+                var templateService = RazorEngineService.Create(config);
+
+                string filePath = Path.Combine(Environment.CurrentDirectory, compatFilePath);
+
+                string templatePath = "MarkdownTemplate.txt";
+                if(!File.Exists(templatePath))
                 {
-                    Path = app.Path,
-                    AppPool = appPool.Name,
-                    Site = site?.Name,
-                    ClrVersion = appPool.CLRVersion,
-                    Bitness = bitness,
-                    NumLibs = app.Libraries.Count,
-                    Pipeline = appPool.PipelineMode
-                });
+                    Console.WriteLine("Could not find compat test template at " + templatePath);
+                    return;
+                }
+                string template = File.ReadAllText(templatePath);
+
+                var result =
+                    templateService.RunCompile(template, "templateKey", null,
+                    summaryReport);
+
+                File.WriteAllText(filePath, result);
             }
-
-            var poolList = new List<AppPoolInfo>();
-            foreach (var appPool in report.AppPools.OrderBy(a => a.Name))
+            catch(Exception ex)
             {
-                string bitness = appPool.X64 ? "64bit" : "32bit";
-                var appsInPool = apps.Where(a => a.AppPoolName == appPool.Name).OrderBy(a => a.Path).Select(a => a.Path == "/" ? "/" : a.Path.TrimStart('/')).ToArray();
-                string appsInPoolDisplay = string.Join(", ", appsInPool);
-                string rating = CalcAppPoolRating(appPool);
-
-                poolList.Add(new AppPoolInfo
-                {
-                    Name = appPool.Name,
-                    NumApplications = appPool.NumApplications,
-                    AppNames = appsInPoolDisplay,
-                    Bitness = bitness,
-                    ClrVersion = appPool.CLRVersion,
-                    Pipeline = appPool.PipelineMode,
-                    Rating = rating
-                });
+                Trace.TraceError("Could not write compatibility report. Error: {0}", ex.ToString());
+                Console.WriteLine("Error writing compatibility report");
             }
-
-            var summaryReport = new SummaryReport
-            {
-                Applications = appList,
-                AppPools = poolList,
-                GacLibraryIssues = report.GacLibraries.Where(l => l.Issue != null).ToList(),
-                AppLibraryIssues = apps.Where(a => a.Libraries.Any(l => l.Issue != null))
-                    .SelectMany(a => a.Libraries.Where(l => l.Issue != null).Select(l => new AppIssue { AppName = a.Path, Library = l }))
-                    .ToList()
-            };
-
-
-            var config = new TemplateServiceConfiguration();
-            // .. configure your instance
-            config.DisableTempFileLocking = true;
-            config.Language = RazorEngine.Language.CSharp;
-            config.EncodedStringFactory = new RazorEngine.Text.RawStringFactory();
-
-
-
-            var templateService = RazorEngineService.Create(config);
-
-            string filePath = "compatSummary.md";
-
-            string template = File.ReadAllText("MarkdownTemplate.txt");
-            var result =
-                templateService.RunCompile(template, "templateKey", null,
-                summaryReport);
-
-            File.WriteAllText(filePath, result);
 
         }
 
-        private static string CalcAppPoolRating(IISAppPool appPool)
-        {
-            int rating = 5;
-            if (appPool.CLRVersion == "v2.0")
-                rating -= 2;
-            if (appPool.PipelineMode == "Classic")
-                rating -= 1;
-            if (!appPool.X64)
-                rating -= 1;
 
-            return new string('*', rating);
-        }
+
 
         private static DvnrReport GenerateReportFromExisting(string fromFilename, ReportFileType reportType)
         {
@@ -250,7 +246,7 @@ namespace ContrastDvnr
 
             if (reportType == ReportFileType.Xml)
             {
-                Console.Out.Write("Parsing XML report from {0}.", fromFilename);
+                Console.WriteLine("Parsing XML report from {0}.", fromFilename);
                 return XmlUtils.XmlDeserializeFromString<DvnrReport>(dvnrReportText);
             }
             // TODO: support json file
@@ -280,7 +276,7 @@ namespace ContrastDvnr
 
             var report = new DvnrReport
             {
-                Version = Assembly.GetExecutingAssembly().GetName().Version.ToString(),
+                Version = typeof(DvnrReport).Assembly.GetName().Version.ToString(),
                 MachineInformation = machineInformation,
                 Sites = sites,
                 AppPools = appPools,

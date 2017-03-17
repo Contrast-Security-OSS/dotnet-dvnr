@@ -25,6 +25,10 @@ AppPool | Rating | CLR Version | Bitness | Pipeline | Num Apps | Apps
 
 ## Library Warnings
 
+@if(Model.AppLibraryIssues.Count == 0 && Model.GacLibraryIssues.Count == 0) {
+<text>No issues</text>
+}
+
 @if(Model.AppLibraryIssues.Count > 0) {
 
 <text>

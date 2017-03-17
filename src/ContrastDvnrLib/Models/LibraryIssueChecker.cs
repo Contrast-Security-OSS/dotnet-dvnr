@@ -32,10 +32,7 @@ namespace ContrastDvnrLib.Models
             {
                 return new LibraryIssue("SignalR framework is not currently supported for Assess or Defend rules.");
             }
-            else if(library.Name == "office")
-                return new LibraryIssue(string.Format(unsupportedFrameworkMessage, "office"));
-            else if (library.Name == "AuthzTest")
-                return new LibraryIssue(string.Format(unsupportedFrameworkMessage, "AuthzTest"));
+
 
             return null;
         }
