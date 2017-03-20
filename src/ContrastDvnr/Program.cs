@@ -47,7 +47,7 @@ namespace ContrastDvnr
             if (AppDomain.CurrentDomain.IsDefaultAppDomain())
             {
                 // RazorEngine cannot clean up from the default appdomain...
-                Console.WriteLine("Switching to second AppDomain...");
+                //Console.WriteLine("Switching to second AppDomain...");
                 AppDomainSetup adSetup = new AppDomainSetup();
                 adSetup.ApplicationBase = AppDomain.CurrentDomain.SetupInformation.ApplicationBase;
                 var current = AppDomain.CurrentDomain;
@@ -131,6 +131,7 @@ namespace ContrastDvnr
             else
             {   // write to file
                 string dvnrReportPath = Path.Combine(directory, fileName);
+                Console.WriteLine("Writing DVNR report.");
                 WriteDvnrReportFile(reportType, dvnrReportPath, report);
 
                 string compatReportPath = Path.Combine(directory, "compatSummary.md");
@@ -184,9 +185,12 @@ namespace ContrastDvnr
             try
             {
                 var summaryReport = SummaryReporting.GenerateCompatReport(report);
-                var connectionErrors = TeamServerConnectivityChecker.CheckForConnectionProblems(true);
-                foreach (var err in connectionErrors)
-                    Console.WriteLine(err);
+                List<string> connectionErrors = TeamServerConnectivityChecker.CheckForConnectionProblems(false);
+                List<string> noCertConnectionErrors;
+                if (connectionErrors.Count > 0)
+                    noCertConnectionErrors = TeamServerConnectivityChecker.CheckForConnectionProblems(true);
+                else
+                    noCertConnectionErrors = new List<string>();
 
                 var config = new TemplateServiceConfiguration();
                 config.DisableTempFileLocking = true;
@@ -206,9 +210,13 @@ namespace ContrastDvnr
                 }
                 string template = File.ReadAllText(templatePath);
 
+                DynamicViewBag viewData = new DynamicViewBag();
+                viewData.AddValue("ConnErrors", connectionErrors);
+                viewData.AddValue("NoCertConnErrors", noCertConnectionErrors);
+                
                 var result =
                     templateService.RunCompile(template, "templateKey", null,
-                    summaryReport);
+                    summaryReport, viewData);
 
                 File.WriteAllText(filePath, result);
                 Console.WriteLine("Compatibility report was written to " + filePath);

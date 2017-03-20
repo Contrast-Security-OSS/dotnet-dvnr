@@ -1,4 +1,19 @@
-﻿## Applications
+﻿## Connection
+
+@if(ViewBag.ConnErrors.Count > 0) {
+<text>__WARNING__: There were errors connecting to Contrast TeamServer servers.</text>
+if(ViewBag.NoCertConnErrors.Count == 0) {
+<text>Connection was successful when server SSL certificate verification was turned off.  Please ensure your certificate is valid, not expired and not self-signed.  The Contrast .NET Agent will not work unless the certificate is valid or certificate verification is disabled.  Certificate verification can be disabled by setting the ```TeamServerValidateCert``` to ```false```.  See [Agent Documentation](https://docs.contrastsecurity.com/user_netconfig.html#add-the-teamservervalidatecert-tag-to-the-configuration-file) for more info.</text>
+}
+foreach(var connError in ViewBag.ConnErrors) {
+<text>* @connError</text>
+}
+}
+else {
+<text>No Issues detected when connecting to Contrast TeamServer servers.</text>
+}
+
+## Applications
 
 There are @Model.Applications.Count total applications.
 
@@ -26,7 +41,7 @@ AppPool | Rating | CLR Version | Bitness | Pipeline | Num Apps | Apps
 ## Library Warnings
 
 @if(Model.AppLibraryIssues.Count == 0 && Model.GacLibraryIssues.Count == 0) {
-<text>No issues</text>
+<text>No issues detected.</text>
 }
 
 @if(Model.AppLibraryIssues.Count > 0) {
