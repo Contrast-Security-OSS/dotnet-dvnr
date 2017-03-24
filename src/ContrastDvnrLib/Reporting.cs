@@ -81,7 +81,7 @@ namespace ContrastDvnrLib
             else
             {
                 string iisVersionString = FileVersionInfo.GetVersionInfo(iisPath)?.ProductVersion;
-                var iisVersion = Convert.ToInt32(iisVersionString.Substring(0, iisVersionString.IndexOf(".")));
+                var iisVersion = Convert.ToInt32(iisVersionString.Substring(0, iisVersionString.IndexOf(".", StringComparison.Ordinal)));
                 if(iisVersion<7)
                 {
                     Trace.TraceInformation("IIS 7+ not found.  Program will exit");
@@ -206,7 +206,7 @@ namespace ContrastDvnrLib
                     foreach (string versionKeyName in ndpKey.GetSubKeyNames())
                     {
                         string version = null;
-                        if (versionKeyName.StartsWith("v"))
+                        if (versionKeyName.StartsWith("v", StringComparison.Ordinal))
                         {
 
                             RegistryKey versionKey = ndpKey.OpenSubKey(versionKeyName);
@@ -395,6 +395,7 @@ namespace ContrastDvnrLib
                         Console.Error.WriteLine("Could not load assembly info for {0}", lib.Filepath);
                         continue;
                     }
+                    lib.Issue = LibraryIssueChecker.GetIssue(lib);
                     libs.Add(lib);
                 }
             }
@@ -513,7 +514,7 @@ namespace ContrastDvnrLib
                     var assemblyDescription = new AssemblyDescription(assemblyName);
 
                     string name = assemblyDescription.Name;
-                    bool probablyMicrosoftPackage = (name.StartsWith("Microsoft") || name.StartsWith("System"));
+                    bool probablyMicrosoftPackage = (name.StartsWith("Microsoft", StringComparison.Ordinal) || name.StartsWith("System", StringComparison.Ordinal));
                     if (!probablyMicrosoftPackage)
                     {
                         var gacLib = new DotnetLibrary
@@ -544,6 +545,14 @@ namespace ContrastDvnrLib
                                 gacLib.Language = fvi.Language;
                                 gacLib.SHA1Hash = GetFileSHA1(gacLib.Filepath);
                                 gacLib.Md5Hash = GetFileMD5(gacLib.Filepath);
+                                try
+                                {
+                                    gacLib.Issue = LibraryIssueChecker.GetIssue(gacLib);
+                                }
+                                catch
+                                {
+                                    gacLib.Issue = null;
+                                }
 
                                 gacList.Add(gacLib);
                             }

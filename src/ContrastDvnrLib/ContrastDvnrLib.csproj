@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ContrastDvnrLib</RootNamespace>
     <AssemblyName>ContrastDvnrLib</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -21,6 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -29,6 +30,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="GACManagerApi">
@@ -48,14 +50,19 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\DotnetLibrary.cs" />
+    <Compile Include="Models\DvnrReport.cs" />
     <Compile Include="Models\HttpModule.cs" />
     <Compile Include="Models\IISApplication.cs" />
     <Compile Include="Models\IISAppPool.cs" />
     <Compile Include="Models\IISServer.cs" />
     <Compile Include="Models\IISSite.cs" />
+    <Compile Include="Models\LibraryIssue.cs" />
+    <Compile Include="Models\LibraryIssueChecker.cs" />
     <Compile Include="Models\MachineInformation.cs" />
+    <Compile Include="Models\SummaryReport.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Reporting.cs" />
+    <Compile Include="SummaryReporting.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

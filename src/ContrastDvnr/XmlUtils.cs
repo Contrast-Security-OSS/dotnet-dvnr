@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml;
@@ -31,6 +32,28 @@ namespace ContrastDvnr
 
                 return sb.ToString();
             }
+        }
+
+
+
+        public static T XmlDeserializeFromString<T>(string objectData)
+        {
+            object result = null;
+
+           
+                XmlSerializer serializer = new XmlSerializer(typeof(T));
+                using (TextReader reader = new StringReader(objectData))
+                {
+                    using (XmlTextReader xmlReader = new XmlTextReader(reader))
+                    {
+                        xmlReader.XmlResolver = null;
+                        xmlReader.DtdProcessing = DtdProcessing.Prohibit;
+                        xmlReader.Normalization = true;
+                        result = serializer.Deserialize(xmlReader);
+                    }
+                }
+
+            return (T)result;
         }
     }
 }
