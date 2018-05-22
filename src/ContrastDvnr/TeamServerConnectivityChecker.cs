@@ -11,7 +11,6 @@ namespace ContrastDvnr
     {
         const string evalTSUrl = "https://eval.contrastsecurity.com";
         const string prodTSUrl = "https://app.contrastsecurity.com";
-        //const string prodTSUrl = "https://teamserver-dotnet.internal.contsec.com";
 
         public static List<string> CheckForConnectionProblems(bool ignoreCertificateErrors)
         {
